@@ -9,7 +9,7 @@
 
 'use strict';
 
-/** @type {string[]} Card background colors, cycled by card index. */
+/** @type {string[]} Card background colors used in random assignment. */
 const CARD_COLORS = [
   '#4f46e5', // indigo
   '#0891b2', // cyan
@@ -19,6 +19,10 @@ const CARD_COLORS = [
   '#d97706', // amber
   '#0f766e', // teal
   '#9333ea', // purple
+  '#db2777', // pink
+  '#0284c7', // sky
+  '#16a34a', // green
+  '#b45309', // orange-brown
 ];
 
 /** @const {string} localStorage key for the set of revealed questions. */
@@ -62,6 +66,15 @@ function clearRevealedQuestions() {
 // ── Card DOM creation ────────────────────────────────────────────────────────
 
 /**
+ * Picks a random color from CARD_COLORS.
+ *
+ * @returns {string} A CSS color string.
+ */
+function randomCardColor() {
+  return CARD_COLORS[Math.floor(Math.random() * CARD_COLORS.length)];
+}
+
+/**
  * Creates a single `.card-wrap` element.
  *
  * @param {number}   index       - Card position in the grid (0-based).
@@ -71,7 +84,7 @@ function clearRevealedQuestions() {
  * @returns {HTMLElement}
  */
 function createCard(index, question, preRevealed, onPick) {
-  const color = CARD_COLORS[index % CARD_COLORS.length];
+  const color = randomCardColor();
   const rot   = preRevealed ? '0' : (Math.random() * 14 - 7).toFixed(2);
   const label = String(index + 1).padStart(2, '0');
 
@@ -102,22 +115,30 @@ function createCard(index, question, preRevealed, onPick) {
 // ── Grid builder ─────────────────────────────────────────────────────────────
 
 /**
- * Clears the grid element and populates it with a fresh random set of cards.
- * Cards whose questions are in the revealed set start face-up.
+ * Clears the grid and populates it with cards.
  *
- * @param {HTMLElement} gridEl     - The `#cards-grid` container.
- * @param {function(HTMLElement, string): void} onCardPick - Passed to each fresh card.
+ * When `existingDeck` is supplied the same question order and count are
+ * preserved (only the revealed-state highlighting is refreshed).  This lets
+ * "losuj jeszcze raz" keep the deck identical while "resetuj talię" always
+ * generates a fresh shuffle.
+ *
+ * @param {HTMLElement}                          gridEl       - The `#cards-grid` container.
+ * @param {function(HTMLElement, string): void}  onCardPick   - Passed to each fresh card.
+ * @param {string[]|null}                        [existingDeck] - Previously built deck to reuse.
+ * @returns {string[]} The deck (question array) that was rendered.
  */
-function buildCardGrid(gridEl, onCardPick) {
+function buildCardGrid(gridEl, onCardPick, existingDeck) {
   gridEl.innerHTML = '';
 
   const revealed = getRevealedQuestions();
-  const count    = randInt(20, 30);
-  const pool     = shuffle([...QUESTIONS]);
+  const pool     = existingDeck
+    ? existingDeck
+    : shuffle([...QUESTIONS]).slice(0, randInt(20, 30));
 
-  for (let i = 0; i < count; i++) {
-    const question    = pool[i % pool.length];
+  pool.forEach((question, i) => {
     const preRevealed = revealed.has(question);
     gridEl.appendChild(createCard(i, question, preRevealed, onCardPick));
-  }
+  });
+
+  return pool;
 }

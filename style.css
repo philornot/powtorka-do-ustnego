@@ -9,6 +9,9 @@
   padding: 0;
 }
 
+/* Fix: author stylesheet's display:flex overrides hidden in some browsers */
+[hidden] { display: none !important; }
+
 /* ── Design tokens ── */
 :root {
   --bg:           #f2f0eb;
@@ -46,13 +49,47 @@ header {
   overflow: hidden;
 }
 
-/* dot-grid texture */
+/*
+ * Unique header texture: fine diagonal hatching + a large indigo radial bloom
+ * in the upper-right corner replacing the old dot-grid.
+ */
 header::before {
   content: '';
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
-  background-size: 22px 22px;
+  background-image:
+    repeating-linear-gradient(
+      -52deg,
+      transparent          0px,
+      transparent          22px,
+      rgba(255,255,255,0.03) 22px,
+      rgba(255,255,255,0.03) 23px
+    ),
+    repeating-linear-gradient(
+      38deg,
+      transparent          0px,
+      transparent          44px,
+      rgba(129,140,248,0.04) 44px,
+      rgba(129,140,248,0.04) 45px
+    );
+  pointer-events: none;
+}
+
+header::after {
+  content: '';
+  position: absolute;
+  width: 520px;
+  height: 520px;
+  right: -80px;
+  top: -180px;
+  background: radial-gradient(
+    circle at center,
+    rgba(99, 102, 241, 0.38) 0%,
+    rgba(139, 92, 246, 0.18) 38%,
+    transparent              68%
+  );
+  border-radius: 50%;
+  filter: blur(48px);
   pointer-events: none;
 }
 
@@ -354,12 +391,15 @@ main {
    FREE MODE — Notes grid
    ════════════════════════════════════════ */
 
+.free-mode-wrapper {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
 .notes-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
-  max-width: 1100px;
-  margin: 0 auto;
 }
 
 /* ── Note box ── */
@@ -378,6 +418,30 @@ main {
   box-shadow: var(--shadow-card);
 }
 
+/* ── Floating (dragged-out) note box ── */
+.note-box.is-floating {
+  position: absolute;
+  z-index: 500;
+  /* Re-apply shadow when floating */
+  box-shadow: 0 8px 32px rgba(79, 70, 229, 0.18);
+}
+
+.note-box.is-dragging {
+  box-shadow: 0 20px 56px rgba(79, 70, 229, 0.30);
+  opacity: 0.96;
+  /* Prevent text selection appearing during drag */
+  user-select: none;
+}
+
+/* ── Placeholder left in grid when box is lifted ── */
+.note-placeholder {
+  background: rgba(79, 70, 229, 0.04);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-card);
+  /* width/height set inline by JS */
+}
+
+/* ── Header strip inside each note box ── */
 .note-header {
   display: flex;
   align-items: center;
@@ -387,6 +451,16 @@ main {
   background: #faf9ff;
 }
 
+/* Drag cursor on desktop only – JS adds the class, CSS does the styling */
+.drag-handle {
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Titles are real text values (not placeholders), same colour as regular text */
 .note-title {
   flex: 1;
   min-width: 0;
@@ -398,7 +472,7 @@ main {
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text);   /* intentional: same as body text, not accent */
   padding: 0;
 }
 
@@ -406,8 +480,8 @@ main {
   color: #c4c1e8;
 }
 
-/* List-format toggle button */
-.note-list-btn {
+/* ── Delete button (replaces the old list-format toggle) ── */
+.note-delete-btn {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -423,11 +497,10 @@ main {
   transition: background var(--transition), border-color var(--transition), color var(--transition);
 }
 
-.note-list-btn:hover,
-.note-list-btn.active {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
+.note-delete-btn:hover {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #ef4444;
 }
 
 .note-content {
@@ -447,6 +520,34 @@ main {
 .note-content::placeholder {
   color: #c4c1e8;
   font-style: italic;
+}
+
+/* ── Add-box toolbar ── */
+.notes-toolbar {
+  display: flex;
+  justify-content: center;
+  padding: 1.1rem 0 0.5rem;
+}
+
+.add-note-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1.25rem;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: none;
+  border-radius: 8px;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.add-note-btn:hover {
+  background: var(--accent);
+  color: var(--white);
 }
 
 /* ════════════════════════════════════════
@@ -586,6 +687,198 @@ main {
 }
 
 /* ════════════════════════════════════════
+   HELP BUTTON
+   ════════════════════════════════════════ */
+
+.help-btn {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  z-index: 900;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.40);
+  transition: background var(--transition), transform var(--transition), box-shadow var(--transition);
+}
+
+.help-btn:hover {
+  background: #4338ca;
+  transform: scale(1.1);
+}
+
+/* First-visit pulse to draw attention */
+.help-btn.pulse {
+  animation: help-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes help-pulse {
+  0%, 100% {
+    box-shadow: 0 4px 16px rgba(79, 70, 229, 0.40);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 4px 32px rgba(79, 70, 229, 0.70), 0 0 0 10px rgba(79, 70, 229, 0.15);
+    transform: scale(1.08);
+  }
+}
+
+/* ════════════════════════════════════════
+   TUTORIAL OVERLAY
+   ════════════════════════════════════════ */
+
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  /* Backdrop – spotlight handles the focused element darkening */
+  background: rgba(15, 15, 30, 0.55);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.tutorial-card {
+  background: var(--white);
+  border-radius: 18px;
+  padding: 2rem 2rem 1.6rem;
+  max-width: 440px;
+  width: 100%;
+  position: relative;
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.28);
+  animation: fade-up 0.28s ease both;
+}
+
+.tut-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  padding: 0.3rem;
+  line-height: 1;
+  border-radius: 6px;
+  transition: color var(--transition), background var(--transition);
+}
+
+.tut-close:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+
+.tut-icon-wrap {
+  width: 48px;
+  height: 48px;
+  background: var(--accent-soft);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 1.45rem;
+  margin-bottom: 1.1rem;
+}
+
+.tut-title {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 0.7rem;
+  line-height: 1.25;
+}
+
+.tut-body {
+  font-size: 0.95rem;
+  line-height: 1.72;
+  color: var(--text-muted);
+  margin-bottom: 1.6rem;
+}
+
+.tut-body strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.tut-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.tut-counter {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.tut-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tut-btn {
+  padding: 0.48rem 1.05rem;
+  border-radius: 8px;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.tut-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tut-btn--primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.tut-btn--primary:hover:not(:disabled) {
+  background: #4338ca;
+  border-color: #4338ca;
+}
+
+/* Element spotlight (injected by tutorial.js) */
+.tutorial-spotlight {
+  position: fixed;
+  z-index: 9998;
+  border-radius: 12px;
+  outline: 3px solid #818cf8;
+  box-shadow:
+    0 0 0 9999px rgba(15, 15, 30, 0.55), /* backdrop */
+    0 0 24px rgba(129, 140, 248, 0.60);  /* glow on the highlighted element */
+  pointer-events: none;
+  animation: spotlight-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes spotlight-pulse {
+  0%, 100% { outline-color: #818cf8; outline-width: 3px; }
+  50%       { outline-color: #4f46e5; outline-width: 4px; }
+}
+
+/* ════════════════════════════════════════
    RESPONSIVE
    ════════════════════════════════════════ */
 
@@ -596,6 +889,7 @@ main {
 }
 
 @media (max-width: 580px) {
+  /* Single-column notes, dragging disabled via JS (isMobileDevice check) */
   .notes-grid {
     grid-template-columns: 1fr;
   }
@@ -621,5 +915,12 @@ main {
     right: 1rem;
     left: 1rem;
     max-width: none;
+    /* Shift slightly so it doesn't obscure the help button */
+    bottom: 4.5rem;
+  }
+
+  .help-btn {
+    bottom: 1rem;
+    left: 1rem;
   }
 }
