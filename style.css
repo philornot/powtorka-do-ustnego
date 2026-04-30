@@ -1,0 +1,343 @@
+/* ── Reset ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Tokens ── */
+:root {
+  --bg:            #f2f0eb;
+  --header-bg:     #17172b;
+  --text:          #1c1a35;
+  --text-muted:    #6b6893;
+  --accent:        #4f46e5;
+  --accent-soft:   #e0e7ff;
+  --white:         #ffffff;
+  --border:        #dddaf5;
+  --radius-card:   12px;
+  --radius-input:  10px;
+  --shadow-card:   0 6px 24px rgba(79, 70, 229, 0.10);
+  --transition:    0.25s ease;
+}
+
+/* ── Base ── */
+html, body {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/* ── Header ── */
+header {
+  background: var(--header-bg);
+  padding: 2.8rem 2rem 3.2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* dot-grid texture */
+header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+  pointer-events: none;
+}
+
+.header-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.eyebrow {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #818cf8;
+  margin-bottom: 1rem;
+}
+
+h1 {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: clamp(2.8rem, 9vw, 5.5rem);
+  color: #fff;
+  line-height: 0.92;
+  text-transform: lowercase;
+}
+
+h1 .h1-accent {
+  color: #818cf8;
+}
+
+.header-sub {
+  margin-top: 1.4rem;
+  color: #a5b4fc;
+  font-size: 1rem;
+  font-style: italic;
+}
+
+/* ── Main layout ── */
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 6rem;
+}
+
+/* ════════════════════════════════════════
+   PHASE 1 — Cards grid
+   ════════════════════════════════════════ */
+
+#cards-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  justify-content: center;
+  align-items: center;
+  padding: 1.5rem 0 2rem;
+}
+
+/* ── Card wrapper (handles tilt + perspective) ── */
+.card-wrap {
+  width: 118px;
+  height: 168px;
+  perspective: 900px;
+  cursor: pointer;
+  flex-shrink: 0;
+  /* CSS var set by JS */
+  --rot: 0deg;
+  transition: opacity 0.45s ease, filter 0.45s ease;
+}
+
+.card-wrap.faded {
+  opacity: 0.1;
+  filter: grayscale(70%);
+  pointer-events: none;
+}
+
+/* ── 3D inner ── */
+.card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: rotate(var(--rot));
+  transition: transform 0.7s cubic-bezier(0.4, 0.2, 0.2, 1);
+  border-radius: var(--radius-card);
+}
+
+.card-wrap:not(.faded):hover .card-inner {
+  transform: rotate(0deg) translateY(-8px) scale(1.07);
+}
+
+.card-wrap.flipped .card-inner {
+  transform: rotateY(180deg) !important;
+}
+
+/* ── Shared face styles ── */
+.card-face {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-card);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* ── Back face (colored, face-down) ── */
+.card-back {
+  /* color set via --card-color on .card-wrap */
+  background: var(--card-color, #4f46e5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+}
+
+/* inner border ornament */
+.card-back::after {
+  content: '';
+  position: absolute;
+  inset: 9px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.card-star {
+  font-size: 1.6rem;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1;
+  user-select: none;
+}
+
+.card-num {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: rgba(255, 255, 255, 0.45);
+  text-transform: uppercase;
+}
+
+/* ── Front face (revealed, white) ── */
+.card-front {
+  background: var(--white);
+  transform: rotateY(180deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.8rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.card-front .q-preview {
+  font-size: 0.58rem;
+  color: #4338ca;
+  text-align: center;
+  line-height: 1.55;
+}
+
+/* ════════════════════════════════════════
+   PHASE 2 — Question + answer
+   ════════════════════════════════════════ */
+
+#phase-answer {
+  animation: fade-up 0.5s ease both;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Question display card */
+.question-card {
+  background: var(--white);
+  border-radius: var(--radius-card);
+  border-left: 5px solid var(--accent);
+  padding: 1.8rem 2.2rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-card);
+  max-width: 780px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.q-label {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+}
+
+#revealed-question {
+  font-size: 1.12rem;
+  font-weight: 500;
+  line-height: 1.72;
+  color: var(--text);
+}
+
+/* Answer area */
+.answer-area {
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.answer-area label {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.6rem;
+}
+
+textarea {
+  width: 100%;
+  min-height: 260px;
+  background: var(--white);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-input);
+  padding: 1.1rem 1.3rem;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 1rem;
+  line-height: 1.75;
+  color: var(--text);
+  resize: vertical;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+textarea:focus {
+  border-color: var(--accent);
+}
+
+textarea::placeholder {
+  color: #c4c1e8;
+  font-style: italic;
+}
+
+/* Footer row */
+.answer-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+#char-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Reset button */
+#btn-reset {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 1.25rem;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+#btn-reset:hover {
+  background: var(--accent);
+  color: var(--white);
+}
+
+/* ── Responsive tweaks ── */
+@media (max-width: 500px) {
+  .card-wrap {
+    width: 96px;
+    height: 136px;
+  }
+
+  h1 {
+    font-size: 2.6rem;
+  }
+
+  .question-card {
+    padding: 1.3rem 1.4rem;
+  }
+}

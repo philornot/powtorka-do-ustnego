@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Powtórka do ustnego</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <span class="eyebrow">język polski · egzamin ustny 2026–2028</span>
+      <h1>powtórka<br /><span class="h1-accent">do ustnego</span></h1>
+      <p class="header-sub">Kliknij jedną kartę, żeby wylosować pytanie.</p>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Phase 1: pick a card -->
+    <section id="phase-pick">
+      <div id="cards-grid"></div>
+    </section>
+
+    <!-- Phase 2: answer the question -->
+    <section id="phase-answer" hidden>
+      <div class="question-card">
+        <span class="q-label">twoje pytanie</span>
+        <p id="revealed-question"></p>
+      </div>
+
+      <div class="answer-area">
+        <label for="answer-box">twoja wypowiedź</label>
+        <textarea
+          id="answer-box"
+          placeholder="Zacznij pisać swoją odpowiedź…"
+          spellcheck="true"
+          lang="pl"
+        ></textarea>
+        <div class="answer-footer">
+          <span id="char-count">0 znaków</span>
+          <button id="btn-reset">↺ losuj jeszcze raz</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="questions.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
