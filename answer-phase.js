@@ -8,8 +8,8 @@
  *                    Boxes can be dragged by their dedicated drag-handle strip
  *                    and docked into any empty slot by hovering + releasing.
  *                    Floating boxes (not docked) persist across mode switches.
- *                    State (content, titles, slot assignments) is auto-saved
- *                    to localStorage per question.
+ *                    State (content, titles, slot assignments, floating
+ *                    positions) is auto-saved to localStorage per question.
  *   • "structured" – A single large textarea with word/char/time counters.
  *
  * Depends on: utils.js
@@ -48,10 +48,12 @@ function noteStorageKey(question) {
 
 /**
  * @typedef {Object} BoxData
- * @property {string}      id      - Unique box identifier.
- * @property {string}      title   - Editable header text.
- * @property {string}      content - Textarea content.
- * @property {number|null} slot    - Grid slot index (0-based), or null if floating.
+ * @property {string}      id        - Unique box identifier.
+ * @property {string}      title     - Editable header text.
+ * @property {string}      content   - Textarea content.
+ * @property {number|null} slot      - Grid slot index (0-based), or null if floating.
+ * @property {number|null} floatLeft - Absolute page-left in px when floating; null if docked.
+ * @property {number|null} floatTop  - Absolute page-top in px when floating; null if docked.
  */
 
 /**
@@ -82,10 +84,12 @@ function loadNotes(question) {
       const boxes = NOTE_BOXES_CONFIG
         .filter(c => data[c.key] !== undefined)
         .map((c, i) => ({
-          id:      c.key,
-          title:   data[c.key]?.title   || c.label,
-          content: data[c.key]?.content || '',
-          slot:    i,
+          id:        c.key,
+          title:     data[c.key]?.title   || c.label,
+          content:   data[c.key]?.content || '',
+          slot:      i,
+          floatLeft: null,
+          floatTop:  null,
         }));
       return boxes.length ? { boxes, structuredText: '' } : null;
     }
@@ -105,10 +109,12 @@ function loadNotes(question) {
 function getDefaultNotes() {
   return {
     boxes: NOTE_BOXES_CONFIG.map((c, i) => ({
-      id:      c.key,
-      title:   c.label,
-      content: '',
-      slot:    i,
+      id:        c.key,
+      title:     c.label,
+      content:   '',
+      slot:      i,
+      floatLeft: null,
+      floatTop:  null,
     })),
     structuredText: '',
   };
@@ -311,17 +317,26 @@ function createFreeMode(question) {
   // ── Persist helper ─────────────────────────────────────────────────────────
 
   /**
-   * Reads all note boxes and saves their current state (including slot index).
+   * Reads all note boxes and saves their current state.
+   *
+   * For docked boxes: persists the slot index; floatLeft/floatTop are null.
+   * For floating boxes: persists the current absolute page position so it can
+   * be restored on the next load; slot is null.
    */
   function persist() {
     notes.boxes = notes.boxes.reduce((acc, box) => {
       const el = boxEls.get(box.id);
       if (!el) return acc;
+
+      const isFloating = el.classList.contains('is-floating');
+
       acc.push({
-        id:      box.id,
-        title:   /** @type {HTMLInputElement}    */ (el.querySelector('.note-title')).value,
-        content: /** @type {HTMLTextAreaElement} */ (el.querySelector('.note-content')).value,
-        slot:    el.dataset.slot !== undefined ? parseInt(el.dataset.slot, 10) : null,
+        id:        box.id,
+        title:     /** @type {HTMLInputElement}    */ (el.querySelector('.note-title')).value,
+        content:   /** @type {HTMLTextAreaElement} */ (el.querySelector('.note-content')).value,
+        slot:      isFloating ? null : (el.dataset.slot !== undefined ? parseInt(el.dataset.slot, 10) : null),
+        floatLeft: isFloating ? (parseFloat(el.style.left) || null) : null,
+        floatTop:  isFloating ? (parseFloat(el.style.top)  || null) : null,
       });
       return acc;
     }, /** @type {BoxData[]} */ ([]));
@@ -423,17 +438,21 @@ function createFreeMode(question) {
 
       dragging = true;
 
+      // Snapshot the box's current viewport position BEFORE any DOM mutations.
+      // emptySlot() inserts a placeholder before the box, which shifts its
+      // layout position and would cause getBoundingClientRect() to return a
+      // stale / wrong rect if called after.
+      const rect    = boxEl.getBoundingClientRect();
+      const scrollX = window.scrollX || window.pageXOffset;
+      const scrollY = window.scrollY || window.pageYOffset;
+
       // Lift box out of its slot (if docked).
       const currentSlot = parseInt(boxEl.dataset.slot || '-1', 10);
       if (currentSlot >= 0 && slots[currentSlot] === id) {
         emptySlot(currentSlot);
       }
 
-      // Position box at its current viewport location before reparenting.
-      const rect    = boxEl.getBoundingClientRect();
-      const scrollX = window.scrollX || window.pageXOffset;
-      const scrollY = window.scrollY || window.pageYOffset;
-
+      // Pin the box absolutely at the position it occupied before being lifted.
       boxEl.classList.add('is-floating');
       boxEl.style.width = rect.width + 'px';
       boxEl.style.left  = (rect.left + scrollX) + 'px';
@@ -540,7 +559,7 @@ function createFreeMode(question) {
    */
   function addBox() {
     const id      = 'custom_' + Date.now();
-    const boxData = { id, title: 'notatka', content: '', slot: null };
+    const boxData = { id, title: 'notatka', content: '', slot: null, floatLeft: null, floatTop: null };
     notes.boxes.push(boxData);
 
     const el = renderBox(boxData);
@@ -567,19 +586,26 @@ function createFreeMode(question) {
     appendEmptySlot();
   }
 
-  // Place each saved box into its slot (or leave floating if slot is null).
+  // Place each saved box into its slot, or restore its floating position.
   notes.boxes.forEach(boxData => {
     const el = renderBox(boxData);
     if (boxData.slot !== null && boxData.slot < slots.length) {
       dockBoxIntoSlot(boxData.slot, el, boxData.id);
     } else {
-      // Floating – restore position if we had it (we don't store absolute px,
-      // so just leave it floating near top-left; user can re-dock).
-      const rect = grid.getBoundingClientRect();
       el.classList.add('is-floating');
       el.style.width = '280px';
-      el.style.left  = (rect.left + 20 + Math.random() * 40) + 'px';
-      el.style.top   = (rect.top  + 20 + Math.random() * 40) + 'px';
+
+      if (boxData.floatLeft != null && boxData.floatTop != null) {
+        // Restore the exact position the user last left this box at.
+        el.style.left = boxData.floatLeft + 'px';
+        el.style.top  = boxData.floatTop  + 'px';
+      } else {
+        // No saved position (e.g. legacy data) — place near the grid.
+        const rect = grid.getBoundingClientRect();
+        el.style.left = (rect.left + 20 + Math.random() * 40) + 'px';
+        el.style.top  = (rect.top  + 20 + Math.random() * 40) + 'px';
+      }
+
       document.body.appendChild(el);
       floatingBoxes.add(el);
     }
