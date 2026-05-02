@@ -756,7 +756,7 @@ function renderAnswerPhase(container, question, onReset) {
   footer.className = 'phase-footer';
   footer.innerHTML = `
     <button class="btn-reset" type="button">
-      <i class="ti ti-refresh"></i> losuj jeszcze raz
+      <i class="ti ti-refresh"></i> wróć do losowania
     </button>
   `;
   /** @type {HTMLButtonElement} */ (footer.querySelector('.btn-reset'))
