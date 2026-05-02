@@ -67,6 +67,35 @@ function randomCardColor() {
 }
 
 /**
+ * Builds safe HTML for a card preview, bolding the work title.
+ *
+ * All plain text is run through escapeHtml first. Then a regex locates the
+ * fragment starting with "na podstawie [znanych Ci fragmentów ]" and wraps
+ * everything from that point to the end of the string in <strong> tags, so
+ * the source/title is visually emphasised on the card face.
+ *
+ * Examples:
+ *   "Omów … na podstawie Antygony Sofoklesa."
+ *   → "Omów … na podstawie <strong>Antygony Sofoklesa.</strong>"
+ *
+ *   "Omów … na podstawie znanych Ci fragmentów Iliady Homera."
+ *   → "Omów … na podstawie znanych Ci fragmentów <strong>Iliady Homera.</strong>"
+ *
+ * @param {string} question - Full question text (context reminder already stripped).
+ * @returns {string} HTML string safe for use as innerHTML.
+ */
+function cardPreviewHtml(question) {
+  const escaped = escapeHtml(question);
+
+  // Match the optional "znanych Ci fragmentów " prefix, then capture the rest
+  // (the actual work title + author) as group $2.
+  return escaped.replace(
+    /(na podstawie (?:znanych Ci fragmentów )?)([\s\S]+)$/,
+    '$1<strong>$2</strong>'
+  );
+}
+
+/**
  * Creates a single `.card-wrap` element.
  *
  * Pre-revealed cards start face-up but are still clickable so the user can
@@ -97,7 +126,7 @@ function createCard(index, question, preRevealed, onPick) {
         <span class="card-num">${label}</span>
       </div>
       <div class="card-face card-front">
-        <p class="q-preview">${escapeHtml(previewText)}</p>
+        <p class="q-preview">${cardPreviewHtml(previewText)}</p>
       </div>
     </div>
   `;
