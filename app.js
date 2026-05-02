@@ -19,8 +19,6 @@ const btnResetDeck = /** @type {HTMLButtonElement} */ (document.getElementById('
 
 /**
  * The currently rendered deck (question array).
- * Preserved across "losuj jeszcze raz" so the card positions never change;
- * only cleared on an explicit "resetuj talię".
  *
  * @type {string[]|null}
  */
@@ -28,8 +26,6 @@ let currentDeck = null;
 
 /**
  * Cleanup function returned by `renderAnswerPhase`.
- * Must be called before returning to the pick phase to remove any floating
- * note boxes from `document.body`.
  *
  * @type {(function(): void)|null}
  */
@@ -38,8 +34,7 @@ let currentAnswerCleanup = null;
 // ── Phase transitions ─────────────────────────────────────────────────────────
 
 /**
- * Handles a card pick: fades siblings, flips chosen card, then switches
- * to the answer phase after the flip animation completes.
+ * Handles a card pick. Pre-revealed cards skip the flip animation.
  *
  * @param {HTMLElement} chosenWrap - The `.card-wrap` element that was clicked.
  * @param {string}      question   - The question revealed by the card.
@@ -49,19 +44,24 @@ function onCardPick(chosenWrap, question) {
     if (card !== chosenWrap) card.classList.add('faded');
   });
 
-  chosenWrap.classList.add('flipped');
-  markQuestionRevealed(question);
+  const isPreRevealed = chosenWrap.classList.contains('pre-revealed');
+
+  if (!isPreRevealed) {
+    chosenWrap.classList.add('flipped');
+    markQuestionRevealed(question);
+  }
+
+  const delay = isPreRevealed ? 0 : 1050;
 
   setTimeout(() => {
-    phasePick.hidden  = true;
+    phasePick.hidden   = true;
     phaseAnswer.hidden = false;
     currentAnswerCleanup = renderAnswerPhase(phaseAnswer, question, resetToPick);
-  }, 1050);
+  }, delay);
 }
 
 /**
- * Returns to the card-picking phase, preserving the current deck and
- * revealed-question history so the layout stays identical.
+ * Returns to the card-picking phase, preserving the current deck.
  */
 function resetToPick() {
   if (currentAnswerCleanup) {
@@ -70,17 +70,16 @@ function resetToPick() {
   }
   phaseAnswer.hidden = true;
   phasePick.hidden   = false;
-  // Pass currentDeck to reuse the same cards – layout and count unchanged.
   currentDeck = buildCardGrid(cardsGrid, onCardPick, currentDeck);
 }
 
 /**
- * Hard-resets the deck: clears all revealed history and rebuilds the grid
- * with a fresh random question assignment and a new card count.
+ * Hard-resets the deck: clears all revealed history and rebuilds with a
+ * fresh random question assignment and a new card count.
  */
 function resetDeck() {
   clearRevealedQuestions();
-  currentDeck = null; // force a fresh shuffle in buildCardGrid
+  currentDeck = null;
   currentDeck = buildCardGrid(cardsGrid, onCardPick);
 }
 

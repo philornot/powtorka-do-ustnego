@@ -1,8 +1,9 @@
 /**
  * @fileoverview Card grid creation and revealed-question tracking.
  *
- * Tracks which questions the user has already drawn so they can be shown
- * face-up on subsequent rounds. State is persisted in localStorage.
+ * Previously revealed cards remain fully clickable so the user can revisit
+ * questions they already answered. Card previews strip the trailing context
+ * reminder; the full question text is always passed to onPick.
  *
  * Depends on: utils.js, QUESTIONS (questions.js)
  */
@@ -11,18 +12,9 @@
 
 /** @type {string[]} Card background colors used in random assignment. */
 const CARD_COLORS = [
-  '#4f46e5', // indigo
-  '#0891b2', // cyan
-  '#059669', // emerald
-  '#e11d48', // rose
-  '#7c3aed', // violet
-  '#d97706', // amber
-  '#0f766e', // teal
-  '#9333ea', // purple
-  '#db2777', // pink
-  '#0284c7', // sky
-  '#16a34a', // green
-  '#b45309', // orange-brown
+  '#4f46e5','#0891b2','#059669','#e11d48','#7c3aed',
+  '#d97706','#0f766e','#9333ea','#db2777','#0284c7',
+  '#16a34a','#b45309',
 ];
 
 /** @const {string} localStorage key for the set of revealed questions. */
@@ -77,16 +69,21 @@ function randomCardColor() {
 /**
  * Creates a single `.card-wrap` element.
  *
+ * Pre-revealed cards start face-up but are still clickable so the user can
+ * revisit them. The front face shows a shortened preview (context reminder
+ * stripped). The full question is forwarded to onPick for the answer phase.
+ *
  * @param {number}   index       - Card position in the grid (0-based).
- * @param {string}   question    - Exam question assigned to this card.
- * @param {boolean}  preRevealed - If true, the card starts face-up (already drawn).
+ * @param {string}   question    - Full exam question assigned to this card.
+ * @param {boolean}  preRevealed - If true, the card starts face-up.
  * @param {function(HTMLElement, string): void} onPick - Click callback.
  * @returns {HTMLElement}
  */
 function createCard(index, question, preRevealed, onPick) {
-  const color = randomCardColor();
-  const rot   = preRevealed ? '0' : (Math.random() * 14 - 7).toFixed(2);
-  const label = String(index + 1).padStart(2, '0');
+  const color       = randomCardColor();
+  const rot         = preRevealed ? '0' : (Math.random() * 14 - 7).toFixed(2);
+  const label       = String(index + 1).padStart(2, '0');
+  const previewText = stripContextReminder(question);
 
   const wrap = document.createElement('div');
   wrap.className = 'card-wrap' + (preRevealed ? ' pre-revealed' : '');
@@ -100,14 +97,12 @@ function createCard(index, question, preRevealed, onPick) {
         <span class="card-num">${label}</span>
       </div>
       <div class="card-face card-front">
-        <p class="q-preview">${escapeHtml(question)}</p>
+        <p class="q-preview">${escapeHtml(previewText)}</p>
       </div>
     </div>
   `;
 
-  if (!preRevealed) {
-    wrap.addEventListener('click', () => onPick(wrap, question), { once: true });
-  }
+  wrap.addEventListener('click', () => onPick(wrap, question), { once: true });
 
   return wrap;
 }
@@ -117,15 +112,10 @@ function createCard(index, question, preRevealed, onPick) {
 /**
  * Clears the grid and populates it with cards.
  *
- * When `existingDeck` is supplied the same question order and count are
- * preserved (only the revealed-state highlighting is refreshed).  This lets
- * "losuj jeszcze raz" keep the deck identical while "resetuj talię" always
- * generates a fresh shuffle.
- *
- * @param {HTMLElement}                          gridEl       - The `#cards-grid` container.
- * @param {function(HTMLElement, string): void}  onCardPick   - Passed to each fresh card.
- * @param {string[]|null}                        [existingDeck] - Previously built deck to reuse.
- * @returns {string[]} The deck (question array) that was rendered.
+ * @param {HTMLElement}                          gridEl
+ * @param {function(HTMLElement, string): void}  onCardPick
+ * @param {string[]|null}                        [existingDeck]
+ * @returns {string[]}
  */
 function buildCardGrid(gridEl, onCardPick, existingDeck) {
   gridEl.innerHTML = '';

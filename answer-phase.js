@@ -1,13 +1,16 @@
 /**
- * @fileoverview Answer-phase UI: mode toggle, free-form draggable note boxes,
- * and classic structured-textarea mode.
+ * @fileoverview Answer-phase UI: mode toggle, free-form note boxes with
+ * slot-based docking, and classic structured-textarea mode.
  *
  * Two modes:
- *   • "free"       – Draggable note boxes with editable titles, a delete
- *                    button, and an "add box" toolbar button.
- *                    Notes are auto-saved to localStorage per question.
- *                    Dragging is disabled on touch/mobile devices.
- *   • "structured" – A single large textarea (the original experience).
+ *   • "free"       – Note boxes in a fixed slot grid. Each slot is either
+ *                    occupied by a box or shows an empty hatched placeholder.
+ *                    Boxes can be dragged by their dedicated drag-handle strip
+ *                    and docked into any empty slot by hovering + releasing.
+ *                    Floating boxes (not docked) persist across mode switches.
+ *                    State (content, titles, slot assignments) is auto-saved
+ *                    to localStorage per question.
+ *   • "structured" – A single large textarea with word/char/time counters.
  *
  * Depends on: utils.js
  */
@@ -44,11 +47,25 @@ function noteStorageKey(question) {
 }
 
 /**
- * Loads saved note data for a given question.
- * Handles migration from the legacy per-key format.
+ * @typedef {Object} BoxData
+ * @property {string}      id      - Unique box identifier.
+ * @property {string}      title   - Editable header text.
+ * @property {string}      content - Textarea content.
+ * @property {number|null} slot    - Grid slot index (0-based), or null if floating.
+ */
+
+/**
+ * @typedef {Object} NotesState
+ * @property {BoxData[]} boxes
+ * @property {string}    structuredText - Content of the structured textarea.
+ */
+
+/**
+ * Loads saved note state for a given question.
+ * Handles migration from the legacy per-key format (no slot info).
  *
  * @param {string} question
- * @returns {{boxes: Array<{id: string, title: string, content: string}>}|null}
+ * @returns {NotesState|null}
  */
 function loadNotes(question) {
   try {
@@ -57,19 +74,20 @@ function loadNotes(question) {
     const data = JSON.parse(raw);
     if (!data) return null;
 
-    // New format.
+    // Current format.
     if (data.boxes && Array.isArray(data.boxes)) return data;
 
-    // Legacy format migration: { teza: { title, content, isList }, … }
+    // Legacy format migration: { teza: { title, content }, … }
     if (typeof data === 'object') {
       const boxes = NOTE_BOXES_CONFIG
         .filter(c => data[c.key] !== undefined)
-        .map(c => ({
+        .map((c, i) => ({
           id:      c.key,
-          title:   data[c.key]?.title  || c.label,
+          title:   data[c.key]?.title   || c.label,
           content: data[c.key]?.content || '',
+          slot:    i,
         }));
-      return boxes.length ? { boxes } : null;
+      return boxes.length ? { boxes, structuredText: '' } : null;
     }
 
     return null;
@@ -80,24 +98,27 @@ function loadNotes(question) {
 
 /**
  * Returns the default notes state using NOTE_BOXES_CONFIG.
+ * Each box is assigned to the slot matching its index.
  *
- * @returns {{boxes: Array<{id: string, title: string, content: string}>}}
+ * @returns {NotesState}
  */
 function getDefaultNotes() {
   return {
-    boxes: NOTE_BOXES_CONFIG.map(c => ({
+    boxes: NOTE_BOXES_CONFIG.map((c, i) => ({
       id:      c.key,
       title:   c.label,
       content: '',
+      slot:    i,
     })),
+    structuredText: '',
   };
 }
 
 /**
- * Persists note data for a given question.
+ * Persists note state for a given question.
  *
- * @param {string}                                                          question
- * @param {{boxes: Array<{id: string, title: string, content: string}>}}   notes
+ * @param {string}     question
+ * @param {NotesState} notes
  */
 function saveNotes(question, notes) {
   try {
@@ -109,7 +130,7 @@ function saveNotes(question, notes) {
 
 /**
  * Returns true when the primary input is touch / coarse (mobile / tablet).
- * Used to disable dragging on those devices.
+ * Dragging is disabled on those devices.
  *
  * @returns {boolean}
  */
@@ -117,88 +138,53 @@ function isMobileDevice() {
   return window.matchMedia('(hover: none)').matches;
 }
 
-// ── Drag-and-drop ─────────────────────────────────────────────────────────────
-
-/**
- * Makes a note box draggable by its header on desktop.
- * On first drag the box is "lifted" out of the grid: it is appended to
- * `document.body` as `position: absolute` and a placeholder div is left in
- * the grid to preserve layout.
- *
- * @param {HTMLElement}         boxEl            - The `.note-box` element.
- * @param {function(HTMLElement): void} onLift   - Called once when the box first leaves the grid.
- * @param {function(): void}    onPositionChange - Called after every drop.
- */
-function makeDraggable(boxEl, onLift, onPositionChange) {
-  if (isMobileDevice()) return;
-
-  const header = /** @type {HTMLElement} */ (boxEl.querySelector('.note-header'));
-  header.classList.add('drag-handle');
-
-  let dragging  = false;
-  let originX   = 0;
-  let originY   = 0;
-  let startLeft = 0;
-  let startTop  = 0;
-
-  /** @param {MouseEvent} e */
-  const onMouseMove = e => {
-    if (!dragging) return;
-    const dx = e.clientX - originX;
-    const dy = e.clientY - originY;
-    boxEl.style.left = Math.max(0, startLeft + dx) + 'px';
-    boxEl.style.top  = Math.max(0, startTop  + dy) + 'px';
-  };
-
-  const onMouseUp = () => {
-    if (!dragging) return;
-    dragging = false;
-    header.style.cursor = 'grab';
-    document.body.style.userSelect = '';
-    boxEl.classList.remove('is-dragging');
-    document.removeEventListener('mousemove', onMouseMove);
-    document.removeEventListener('mouseup',   onMouseUp);
-    onPositionChange();
-  };
-
-  header.addEventListener('mousedown', e => {
-    if (e.button !== 0) return;
-    // Don't steal focus from inputs or buttons inside the header.
-    if (/** @type {HTMLElement} */ (e.target).closest('input, button')) return;
-
-    // Lift on first drag.
-    if (!boxEl.classList.contains('is-floating')) {
-      onLift(boxEl);
-    }
-
-    dragging  = true;
-    originX   = e.clientX;
-    originY   = e.clientY;
-    startLeft = parseFloat(boxEl.style.left) || 0;
-    startTop  = parseFloat(boxEl.style.top)  || 0;
-
-    boxEl.classList.add('is-dragging');
-    header.style.cursor = 'grabbing';
-    document.body.style.userSelect = 'none';
-
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup',   onMouseUp);
-    e.preventDefault();
-  });
-}
-
 // ── Free mode ─────────────────────────────────────────────────────────────────
 
 /**
- * Builds the free-mode notes panel with draggable, deletable, addable boxes.
+ * Builds the free-mode notes panel.
+ *
+ * Layout model
+ * ────────────
+ * The grid contains a fixed array of `slots`. Each slot is either:
+ *   - occupied: holds the `.note-box` element directly in the grid DOM, or
+ *   - empty: shows a `.note-slot--empty` hatched placeholder div.
+ *
+ * A box can be dragged by its `.drag-handle` strip only. On drag-start the
+ * box is "lifted": it is appended to document.body as position:absolute and
+ * its slot becomes empty (showing the hatched placeholder). While dragging,
+ * hovering over an empty slot highlights it. On drop:
+ *   - If over a highlighted empty slot → the box docks into that slot.
+ *   - Otherwise → the box remains floating (persists across mode switches).
+ *
+ * Adding a new box always fills the first available empty slot. A new slot is
+ * only appended to the grid when all existing slots are occupied.
+ *
+ * Deleting a box leaves its slot empty (hatched); other boxes do not move.
  *
  * @param {string} question - Used as the persistence key.
  * @returns {{el: HTMLElement, cleanup: function(): void}}
  */
 function createFreeMode(question) {
+  /** @type {NotesState} */
   let notes = loadNotes(question) || getDefaultNotes();
 
-  /** Tracks boxes currently floating on `document.body`. @type {Set<HTMLElement>} */
+  /**
+   * Slot registry: parallel array to grid slot elements.
+   * slots[i] === null  → slot i is empty (shows hatched placeholder).
+   * slots[i] === id    → slot i is occupied by the box with that id.
+   *
+   * @type {Array<string|null>}
+   */
+  const slots = [];
+
+  /**
+   * Map from box id to its HTMLElement (whether docked or floating).
+   *
+   * @type {Map<string, HTMLElement>}
+   */
+  const boxEls = new Map();
+
+  /** Floating boxes currently appended to document.body. @type {Set<HTMLElement>} */
   const floatingBoxes = new Set();
 
   // ── Wrapper & grid ─────────────────────────────────────────────────────────
@@ -219,86 +205,290 @@ function createFreeMode(question) {
   `;
   wrapper.appendChild(toolbar);
 
+  // ── Slot helpers ───────────────────────────────────────────────────────────
+
+  /**
+   * Returns the index of the first empty slot, or -1 if all are occupied.
+   *
+   * @returns {number}
+   */
+  function firstEmptySlot() {
+    return slots.indexOf(null);
+  }
+
+  /**
+   * Creates and appends a new empty (hatched) slot element to the grid.
+   *
+   * @returns {number} The index of the newly created slot.
+   */
+  function appendEmptySlot() {
+    const idx = slots.length;
+    slots.push(null);
+
+    const ph = document.createElement('div');
+    ph.className = 'note-slot--empty';
+    ph.dataset.slot = String(idx);
+    grid.appendChild(ph);
+
+    return idx;
+  }
+
+  /**
+   * Returns the DOM element for slot `idx`.
+   *
+   * @param {number} idx
+   * @returns {HTMLElement|null}
+   */
+  function slotEl(idx) {
+    return /** @type {HTMLElement|null} */ (
+      grid.querySelector(`.note-slot--empty[data-slot="${idx}"], .note-box[data-slot="${idx}"]`)
+    );
+  }
+
+  /**
+   * Replaces the placeholder at `idx` with the given box element, marking the
+   * slot as occupied.
+   *
+   * @param {number}      idx
+   * @param {HTMLElement} boxEl
+   * @param {string}      id
+   */
+  function dockBoxIntoSlot(idx, boxEl, id) {
+    const ph = grid.querySelector(`.note-slot--empty[data-slot="${idx}"]`);
+    if (ph) ph.remove();
+
+    boxEl.classList.remove('is-floating', 'is-dragging');
+    boxEl.style.left  = '';
+    boxEl.style.top   = '';
+    boxEl.style.width = '';
+    boxEl.dataset.slot = String(idx);
+
+    // Insert at correct grid position.
+    const allSlotEls = Array.from(grid.children);
+    const after = allSlotEls.find(el => {
+      const s = parseInt(/** @type {HTMLElement} */ (el).dataset.slot || '-1', 10);
+      return s > idx;
+    });
+    if (after) {
+      grid.insertBefore(boxEl, after);
+    } else {
+      grid.appendChild(boxEl);
+    }
+
+    slots[idx] = id;
+    floatingBoxes.delete(boxEl);
+  }
+
+  /**
+   * Replaces the box element at `idx` with an empty placeholder, marking the
+   * slot as empty.
+   *
+   * @param {number} idx
+   */
+  function emptySlot(idx) {
+    const ph = document.createElement('div');
+    ph.className = 'note-slot--empty';
+    ph.dataset.slot = String(idx);
+
+    const occupied = grid.querySelector(`.note-box[data-slot="${idx}"]`);
+    if (occupied) {
+      grid.insertBefore(ph, occupied);
+      occupied.removeAttribute('data-slot');
+    } else {
+      // Insert at correct position.
+      const allSlotEls = Array.from(grid.children);
+      const after = allSlotEls.find(el => {
+        const s = parseInt(/** @type {HTMLElement} */ (el).dataset.slot || '-1', 10);
+        return s > idx;
+      });
+      if (after) grid.insertBefore(ph, after);
+      else grid.appendChild(ph);
+    }
+
+    slots[idx] = null;
+  }
+
   // ── Persist helper ─────────────────────────────────────────────────────────
 
   /**
-   * Reads all note boxes (grid + floating) and saves their state.
+   * Reads all note boxes and saves their current state (including slot index).
    */
   function persist() {
     notes.boxes = notes.boxes.reduce((acc, box) => {
-      const el = /** @type {HTMLElement|null} */ (
-        document.querySelector(`.note-box[data-id="${box.id}"]`)
-      );
-      if (!el) return acc; // box was deleted
+      const el = boxEls.get(box.id);
+      if (!el) return acc;
       acc.push({
         id:      box.id,
         title:   /** @type {HTMLInputElement}    */ (el.querySelector('.note-title')).value,
         content: /** @type {HTMLTextAreaElement} */ (el.querySelector('.note-content')).value,
+        slot:    el.dataset.slot !== undefined ? parseInt(el.dataset.slot, 10) : null,
       });
       return acc;
-    }, /** @type {typeof notes.boxes} */ ([]));
+    }, /** @type {BoxData[]} */ ([]));
     saveNotes(question, notes);
   }
 
-  // ── Lift (detach from grid) ────────────────────────────────────────────────
+  // ── Drag-and-drop ──────────────────────────────────────────────────────────
+
+  /** @type {HTMLElement|null} Currently highlighted empty slot during drag. */
+  let highlightedSlotEl = null;
 
   /**
-   * Detaches a box from the grid, replaces it with a ghost placeholder,
-   * and appends the box to `document.body` at its current viewport position.
+   * Clears the drop-target highlight from whichever slot is currently lit.
+   */
+  function clearHighlight() {
+    if (highlightedSlotEl) {
+      highlightedSlotEl.classList.remove('note-slot--hover');
+      highlightedSlotEl = null;
+    }
+  }
+
+  /**
+   * Attaches drag behaviour to a note box via its `.drag-handle` strip.
+   * Only active on non-touch devices. Dragging lifts the box to
+   * `document.body`; hovering over an empty slot highlights it; releasing
+   * docks the box there (or leaves it floating).
    *
    * @param {HTMLElement} boxEl
+   * @param {string}      id
    */
-  function liftBox(boxEl) {
-    const rect    = boxEl.getBoundingClientRect();
-    const scrollX = window.scrollX || window.pageXOffset;
-    const scrollY = window.scrollY || window.pageYOffset;
+  function makeDraggable(boxEl, id) {
+    if (isMobileDevice()) return;
 
-    // Placeholder occupies the vacated grid cell.
-    const ph = document.createElement('div');
-    ph.className = 'note-placeholder';
-    ph.style.width  = rect.width  + 'px';
-    ph.style.height = rect.height + 'px';
-    boxEl.insertAdjacentElement('beforebegin', ph);
-    boxEl._placeholder = ph; // non-standard property – OK for internal use
+    const handle = /** @type {HTMLElement} */ (boxEl.querySelector('.drag-handle'));
 
-    // Make floating.
-    boxEl.classList.add('is-floating');
-    boxEl.style.width = rect.width + 'px';
-    boxEl.style.left  = (rect.left + scrollX) + 'px';
-    boxEl.style.top   = (rect.top  + scrollY) + 'px';
-    document.body.appendChild(boxEl);
-    floatingBoxes.add(boxEl);
+    let dragging  = false;
+    let originX   = 0;
+    let originY   = 0;
+    let startLeft = 0;
+    let startTop  = 0;
+
+    /** @param {MouseEvent} e */
+    const onMouseMove = e => {
+      if (!dragging) return;
+
+      const dx = e.clientX - originX;
+      const dy = e.clientY - originY;
+      boxEl.style.left = Math.max(0, startLeft + dx) + 'px';
+      boxEl.style.top  = Math.max(0, startTop  + dy) + 'px';
+
+      // Detect empty slot under cursor.
+      boxEl.style.pointerEvents = 'none';
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      boxEl.style.pointerEvents = '';
+
+      const slotUnder = under
+        ? /** @type {HTMLElement|null} */ (under.closest('.note-slot--empty'))
+        : null;
+
+      if (slotUnder && slotUnder !== highlightedSlotEl) {
+        clearHighlight();
+        slotUnder.classList.add('note-slot--hover');
+        highlightedSlotEl = slotUnder;
+      } else if (!slotUnder) {
+        clearHighlight();
+      }
+    };
+
+    const onMouseUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      handle.style.cursor = '';
+      document.body.style.userSelect = '';
+      boxEl.classList.remove('is-dragging');
+
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup',   onMouseUp);
+
+      if (highlightedSlotEl) {
+        const targetSlot = parseInt(highlightedSlotEl.dataset.slot || '-1', 10);
+        clearHighlight();
+        if (targetSlot >= 0 && slots[targetSlot] === null) {
+          // Find if this box was occupying a slot before.
+          const prevSlot = parseInt(boxEl.dataset.slot || '-1', 10);
+          if (prevSlot >= 0 && slots[prevSlot] === id) {
+            emptySlot(prevSlot);
+          }
+          dockBoxIntoSlot(targetSlot, boxEl, id);
+          persist();
+          return;
+        }
+      }
+
+      persist();
+    };
+
+    handle.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+
+      dragging = true;
+
+      // Lift box out of its slot (if docked).
+      const currentSlot = parseInt(boxEl.dataset.slot || '-1', 10);
+      if (currentSlot >= 0 && slots[currentSlot] === id) {
+        emptySlot(currentSlot);
+      }
+
+      // Position box at its current viewport location before reparenting.
+      const rect    = boxEl.getBoundingClientRect();
+      const scrollX = window.scrollX || window.pageXOffset;
+      const scrollY = window.scrollY || window.pageYOffset;
+
+      boxEl.classList.add('is-floating');
+      boxEl.style.width = rect.width + 'px';
+      boxEl.style.left  = (rect.left + scrollX) + 'px';
+      boxEl.style.top   = (rect.top  + scrollY) + 'px';
+      document.body.appendChild(boxEl);
+      floatingBoxes.add(boxEl);
+
+      originX   = e.clientX;
+      originY   = e.clientY;
+      startLeft = rect.left + scrollX;
+      startTop  = rect.top  + scrollY;
+
+      boxEl.classList.add('is-dragging');
+      handle.style.cursor = 'grabbing';
+      document.body.style.userSelect = 'none';
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup',   onMouseUp);
+      e.preventDefault();
+    });
   }
 
   // ── Delete ─────────────────────────────────────────────────────────────────
 
   /**
-   * Removes a note box from the DOM (and from floatingBoxes if applicable)
-   * and updates persisted state.
+   * Removes a note box. Its slot is replaced with a hatched placeholder;
+   * other boxes do not shift.
    *
    * @param {string} id - Box data-id.
    */
   function removeBox(id) {
-    notes.boxes = notes.boxes.filter(b => b.id !== id);
+    const el = boxEls.get(id);
+    if (!el) return;
 
-    const el = /** @type {HTMLElement|null} */ (
-      document.querySelector(`.note-box[data-id="${id}"]`)
-    );
-    if (el) {
-      if (el._placeholder) el._placeholder.remove();
-      el.remove();
-      floatingBoxes.delete(el);
+    // If docked, leave an empty slot behind.
+    const slotIdx = parseInt(el.dataset.slot || '-1', 10);
+    if (slotIdx >= 0 && slots[slotIdx] === id) {
+      emptySlot(slotIdx);
     }
 
+    // If floating, just remove from body.
+    floatingBoxes.delete(el);
+    el.remove();
+    boxEls.delete(id);
+
+    notes.boxes = notes.boxes.filter(b => b.id !== id);
     saveNotes(question, notes);
   }
 
   // ── Render a single box ────────────────────────────────────────────────────
 
   /**
-   * Creates a `.note-box` element for the given data.
+   * Creates and returns a `.note-box` element.
    *
-   * @param {{id: string, title: string, content: string}} boxData
+   * @param {BoxData} boxData
    * @returns {HTMLElement}
    */
   function renderBox(boxData) {
@@ -307,6 +497,9 @@ function createFreeMode(question) {
     boxEl.dataset.id = boxData.id;
 
     boxEl.innerHTML = `
+      <div class="drag-handle" title="Przeciągnij karteczkę" aria-hidden="true">
+        <i class="ti ti-grip-horizontal"></i>
+      </div>
       <div class="note-header">
         <input
           type="text"
@@ -333,41 +526,76 @@ function createFreeMode(question) {
     /** @type {HTMLTextAreaElement} */ (boxEl.querySelector('.note-content')).addEventListener('input', persist);
     boxEl.querySelector('.note-delete-btn').addEventListener('click', () => removeBox(boxData.id));
 
-    makeDraggable(boxEl, liftBox, persist);
+    boxEls.set(boxData.id, boxEl);
+    makeDraggable(boxEl, boxData.id);
+
     return boxEl;
   }
 
   // ── Add box ────────────────────────────────────────────────────────────────
 
   /**
-   * Appends a blank note box to the grid and persists the updated state.
+   * Adds a new blank note box. Places it in the first empty slot, or appends
+   * a new slot if every existing slot is occupied.
    */
   function addBox() {
     const id      = 'custom_' + Date.now();
-    const boxData = { id, title: 'notatka', content: '' };
+    const boxData = { id, title: 'notatka', content: '', slot: null };
     notes.boxes.push(boxData);
+
     const el = renderBox(boxData);
-    grid.appendChild(el);
+
+    let targetSlot = firstEmptySlot();
+    if (targetSlot === -1) {
+      targetSlot = appendEmptySlot();
+    }
+
+    dockBoxIntoSlot(targetSlot, el, id);
     persist();
+
     /** @type {HTMLTextAreaElement} */ (el.querySelector('.note-content')).focus();
   }
 
   // ── Initial render ─────────────────────────────────────────────────────────
 
-  notes.boxes.forEach(b => grid.appendChild(renderBox(b)));
+  // Determine total slot count: max of saved slot indices + 1, or config length.
+  const maxSlot = notes.boxes.reduce((m, b) => Math.max(m, b.slot ?? -1), -1);
+  const slotCount = Math.max(NOTE_BOXES_CONFIG.length, maxSlot + 1);
+
+  // Pre-create all slots as empty.
+  for (let i = 0; i < slotCount; i++) {
+    appendEmptySlot();
+  }
+
+  // Place each saved box into its slot (or leave floating if slot is null).
+  notes.boxes.forEach(boxData => {
+    const el = renderBox(boxData);
+    if (boxData.slot !== null && boxData.slot < slots.length) {
+      dockBoxIntoSlot(boxData.slot, el, boxData.id);
+    } else {
+      // Floating – restore position if we had it (we don't store absolute px,
+      // so just leave it floating near top-left; user can re-dock).
+      const rect = grid.getBoundingClientRect();
+      el.classList.add('is-floating');
+      el.style.width = '280px';
+      el.style.left  = (rect.left + 20 + Math.random() * 40) + 'px';
+      el.style.top   = (rect.top  + 20 + Math.random() * 40) + 'px';
+      document.body.appendChild(el);
+      floatingBoxes.add(el);
+    }
+  });
+
   toolbar.querySelector('.add-note-btn').addEventListener('click', addBox);
 
   // ── Cleanup ────────────────────────────────────────────────────────────────
 
   /**
-   * Removes all floating boxes from `document.body` (called before leaving
-   * the answer phase so no orphaned elements remain).
+   * Removes all floating boxes from `document.body`.
+   * Called before leaving the answer phase.
    */
   function cleanup() {
-    floatingBoxes.forEach(el => {
-      if (el._placeholder) el._placeholder.remove();
-      el.remove();
-    });
+    clearHighlight();
+    floatingBoxes.forEach(el => el.remove());
     floatingBoxes.clear();
   }
 
@@ -379,9 +607,16 @@ function createFreeMode(question) {
 /**
  * Builds the structured (classic single-textarea) mode element.
  *
+ * Displays speaking-time estimate, word count, and character count below the
+ * textarea. The structured text is persisted per question in the shared notes
+ * state so switching modes does not lose content.
+ *
+ * @param {string}                         question       - Used as the persistence key.
+ * @param {function(): NotesState}         getNotesState  - Returns the current notes object.
+ * @param {function(NotesState): void}     setNotesState  - Saves updated notes.
  * @returns {HTMLElement}
  */
-function createStructuredMode() {
+function createStructuredMode(question, getNotesState, setNotesState) {
   const wrapper = document.createElement('div');
   wrapper.className = 'answer-area';
 
@@ -394,16 +629,40 @@ function createStructuredMode() {
       lang="pl"
     ></textarea>
     <div class="answer-footer">
-      <span class="char-count-el">0 znaków</span>
+      <span class="speak-time-el"></span>
+      <span class="word-count-el"></span>
+      <span class="char-count-el"></span>
     </div>
   `;
 
-  const textarea  = /** @type {HTMLTextAreaElement} */ (wrapper.querySelector('textarea'));
-  const charCount = wrapper.querySelector('.char-count-el');
+  const textarea      = /** @type {HTMLTextAreaElement} */ (wrapper.querySelector('textarea'));
+  const speakTimeEl   = wrapper.querySelector('.speak-time-el');
+  const wordCountEl   = wrapper.querySelector('.word-count-el');
+  const charCountEl   = wrapper.querySelector('.char-count-el');
 
-  textarea.addEventListener('input', () => {
-    charCount.textContent = formatCharCount(textarea.value.length);
-  });
+  // Restore persisted text.
+  const saved = getNotesState();
+  textarea.value = saved.structuredText || '';
+
+  /**
+   * Updates all three counters and persists the current text.
+   */
+  function updateCounters() {
+    const text  = textarea.value;
+    const chars = text.length;
+    const words = countWords(text);
+
+    speakTimeEl.textContent = formatSpeakingTime(words);
+    wordCountEl.textContent = formatWordCount(words);
+    charCountEl.textContent = formatCharCount(chars);
+
+    const state = getNotesState();
+    state.structuredText = text;
+    setNotesState(state);
+  }
+
+  textarea.addEventListener('input', updateCounters);
+  updateCounters();
 
   return wrapper;
 }
@@ -431,6 +690,18 @@ function renderAnswerPhase(container, question, onReset) {
   `;
   container.appendChild(qCard);
 
+  // ── Shared notes-state accessors (for structured mode counter persistence) ─
+  let notesState = loadNotes(question) || getDefaultNotes();
+
+  /** @returns {NotesState} */
+  function getNotesState() { return notesState; }
+
+  /** @param {NotesState} s */
+  function setNotesState(s) {
+    notesState = s;
+    saveNotes(question, notesState);
+  }
+
   // ── Mode toggle bar ────────────────────────────────────────────────────────
   const modeBar = document.createElement('div');
   modeBar.className = 'mode-bar';
@@ -451,7 +722,7 @@ function renderAnswerPhase(container, question, onReset) {
 
   // Build both views once so state survives mode switches.
   const { el: freeEl, cleanup: freeCleanup } = createFreeMode(question);
-  const structuredEl = createStructuredMode();
+  const structuredEl = createStructuredMode(question, getNotesState, setNotesState);
   let currentMode = /** @type {'free'|'structured'} */ ('free');
 
   /**

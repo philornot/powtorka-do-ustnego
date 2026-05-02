@@ -9,7 +9,6 @@
   padding: 0;
 }
 
-/* Fix: author stylesheet's display:flex overrides hidden in some browsers */
 [hidden] { display: none !important; }
 
 /* ── Design tokens ── */
@@ -22,6 +21,7 @@
   --accent-soft:  #e0e7ff;
   --white:        #ffffff;
   --border:       #dddaf5;
+  --card-color:   #4f46e5;
   --radius-card:  12px;
   --radius-input: 10px;
   --shadow-card:  0 6px 24px rgba(79, 70, 229, 0.10);
@@ -49,10 +49,6 @@ header {
   overflow: hidden;
 }
 
-/*
- * Unique header texture: fine diagonal hatching + a large indigo radial bloom
- * in the upper-right corner replacing the old dot-grid.
- */
 header::before {
   content: '';
   position: absolute;
@@ -100,7 +96,7 @@ header::after {
   margin: 0 auto;
 }
 
-/* Title — Fraunces optical serif, upright + italic contrast */
+/* Title — single line, italic accent inline */
 h1 {
   font-family: 'Fraunces', Georgia, serif;
   font-weight: 900;
@@ -109,6 +105,7 @@ h1 {
   line-height: 0.92;
   text-transform: lowercase;
   font-optical-sizing: auto;
+  white-space: nowrap;
 }
 
 h1 .h1-accent {
@@ -123,7 +120,6 @@ h1 .h1-accent {
   font-style: italic;
 }
 
-/* CKE source link */
 .cke-link {
   display: inline-flex;
   align-items: center;
@@ -153,7 +149,6 @@ main {
    PHASE 1 — Cards grid
    ════════════════════════════════════════ */
 
-/* Toolbar row above the grid (reset-deck button) */
 .pick-toolbar {
   display: flex;
   justify-content: flex-end;
@@ -181,7 +176,6 @@ main {
   color: var(--accent);
 }
 
-/* Grid */
 #cards-grid {
   display: flex;
   flex-wrap: wrap;
@@ -191,7 +185,7 @@ main {
   padding: 1.5rem 0 2rem;
 }
 
-/* ── Card wrapper (perspective + tilt) ── */
+/* ── Card wrapper ── */
 .card-wrap {
   width: 118px;
   height: 168px;
@@ -208,18 +202,16 @@ main {
   pointer-events: none;
 }
 
-/* Cards that were already drawn in a previous round */
+/* Previously revealed: still clickable but visually distinct */
 .card-wrap.pre-revealed {
   opacity: 0.55;
-  cursor: default;
-  pointer-events: none;
+  cursor: pointer;
 }
 
 .card-wrap.pre-revealed .card-inner {
   transform: rotate(var(--rot)) rotateY(180deg);
 }
 
-/* ── 3D inner ── */
 .card-inner {
   position: relative;
   width: 100%;
@@ -234,11 +226,14 @@ main {
   transform: rotate(0deg) translateY(-8px) scale(1.07);
 }
 
+.card-wrap.pre-revealed:hover .card-inner {
+  transform: rotate(var(--rot)) rotateY(180deg) translateY(-6px) scale(1.05);
+}
+
 .card-wrap.flipped .card-inner {
   transform: rotateY(180deg) !important;
 }
 
-/* ── Shared face styles ── */
 .card-face {
   position: absolute;
   inset: 0;
@@ -247,7 +242,6 @@ main {
   -webkit-backface-visibility: hidden;
 }
 
-/* ── Back face (coloured, face-down) ── */
 .card-back {
   background: var(--card-color, #4f46e5);
   display: flex;
@@ -258,7 +252,6 @@ main {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
 }
 
-/* inner border ornament */
 .card-back::after {
   content: '';
   position: absolute;
@@ -284,7 +277,6 @@ main {
   text-transform: uppercase;
 }
 
-/* ── Front face (revealed, white) ── */
 .card-front {
   background: var(--white);
   transform: rotateY(180deg);
@@ -315,7 +307,6 @@ main {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Question display card ── */
 .question-card {
   background: var(--white);
   border-radius: var(--radius-card);
@@ -382,13 +373,12 @@ main {
   color: var(--accent);
 }
 
-/* ── Mode content wrapper ── */
 .mode-content {
   animation: fade-up 0.3s ease both;
 }
 
 /* ════════════════════════════════════════
-   FREE MODE — Notes grid
+   FREE MODE — Slot-based note grid
    ════════════════════════════════════════ */
 
 .free-mode-wrapper {
@@ -400,6 +390,28 @@ main {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
+}
+
+/* ── Empty slot (hatched placeholder) ── */
+.note-slot--empty {
+  min-height: 220px;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent         0px,
+    transparent         6px,
+    rgba(79,70,229,0.06) 6px,
+    rgba(79,70,229,0.06) 7px
+  );
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-card);
+  transition: border-color var(--transition), background-color var(--transition);
+}
+
+/* Drop-target highlight when a dragged box hovers over this slot */
+.note-slot--hover {
+  border-color: var(--accent);
+  background-color: var(--accent-soft);
+  background-image: none;
 }
 
 /* ── Note box ── */
@@ -418,6 +430,44 @@ main {
   box-shadow: var(--shadow-card);
 }
 
+/* ── Drag handle strip (only grabbable area) ── */
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 0 4px;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent         0px,
+    transparent         4px,
+    rgba(79,70,229,0.08) 4px,
+    rgba(79,70,229,0.08) 5px
+  );
+  border-bottom: 1.5px solid var(--border);
+  cursor: grab;
+  user-select: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.drag-handle:hover {
+  background-color: var(--accent-soft);
+  background-image: none;
+  color: var(--accent);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* On mobile: hide drag handle (dragging disabled) */
+@media (hover: none) {
+  .drag-handle {
+    display: none;
+  }
+}
+
 /* ── Floating (dragged-out) note box ── */
 .note-box.is-floating {
   position: absolute;
@@ -429,19 +479,9 @@ main {
 .note-box.is-dragging {
   box-shadow: 0 20px 56px rgba(79, 70, 229, 0.30);
   opacity: 0.96;
-  /* Prevent text selection appearing during drag */
-  user-select: none;
 }
 
-/* ── Placeholder left in grid when box is lifted ── */
-.note-placeholder {
-  background: rgba(79, 70, 229, 0.04);
-  border: 2px dashed var(--border);
-  border-radius: var(--radius-card);
-  /* width/height set inline by JS */
-}
-
-/* ── Header strip inside each note box ── */
+/* ── Header strip (title + delete button) ── */
 .note-header {
   display: flex;
   align-items: center;
@@ -451,16 +491,6 @@ main {
   background: #faf9ff;
 }
 
-/* Drag cursor on desktop only – JS adds the class, CSS does the styling */
-.drag-handle {
-  cursor: grab;
-}
-
-.drag-handle:active {
-  cursor: grabbing;
-}
-
-/* Titles are real text values (not placeholders), same colour as regular text */
 .note-title {
   flex: 1;
   min-width: 0;
@@ -472,7 +502,7 @@ main {
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--text);   /* intentional: same as body text, not accent */
+  color: var(--text);
   padding: 0;
 }
 
@@ -480,7 +510,6 @@ main {
   color: #c4c1e8;
 }
 
-/* ── Delete button (replaces the old list-format toggle) ── */
 .note-delete-btn {
   flex-shrink: 0;
   display: flex;
@@ -596,13 +625,24 @@ main {
 
 .answer-footer {
   display: flex;
-  justify-content: flex-start;
+  align-items: center;
+  gap: 1rem;
   margin-top: 0.6rem;
 }
 
+.speak-time-el,
+.word-count-el,
 .char-count-el {
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+/* Subtle separator dots between counters */
+.word-count-el::before,
+.char-count-el::before {
+  content: '·';
+  margin-right: 1rem;
+  opacity: 0.4;
 }
 
 /* ── Phase footer (reset button row) ── */
@@ -715,7 +755,6 @@ main {
   transform: scale(1.1);
 }
 
-/* First-visit pulse to draw attention */
 .help-btn.pulse {
   animation: help-pulse 2.2s ease-in-out infinite;
 }
@@ -738,7 +777,6 @@ main {
 .tutorial-overlay {
   position: fixed;
   inset: 0;
-  /* Backdrop – spotlight handles the focused element darkening */
   background: rgba(15, 15, 30, 0.55);
   z-index: 9999;
   display: flex;
@@ -860,15 +898,14 @@ main {
   border-color: #4338ca;
 }
 
-/* Element spotlight (injected by tutorial.js) */
 .tutorial-spotlight {
   position: fixed;
   z-index: 9998;
   border-radius: 12px;
   outline: 3px solid #818cf8;
   box-shadow:
-    0 0 0 9999px rgba(15, 15, 30, 0.55), /* backdrop */
-    0 0 24px rgba(129, 140, 248, 0.60);  /* glow on the highlighted element */
+    0 0 0 9999px rgba(15, 15, 30, 0.55),
+    0 0 24px rgba(129, 140, 248, 0.60);
   pointer-events: none;
   animation: spotlight-pulse 1.6s ease-in-out infinite;
 }
@@ -889,7 +926,11 @@ main {
 }
 
 @media (max-width: 580px) {
-  /* Single-column notes, dragging disabled via JS (isMobileDevice check) */
+  h1 {
+    font-size: 2rem;
+    white-space: normal;
+  }
+
   .notes-grid {
     grid-template-columns: 1fr;
   }
@@ -897,10 +938,6 @@ main {
   .card-wrap {
     width: 96px;
     height: 136px;
-  }
-
-  h1 {
-    font-size: 2.6rem;
   }
 
   .question-card {
@@ -915,7 +952,6 @@ main {
     right: 1rem;
     left: 1rem;
     max-width: none;
-    /* Shift slightly so it doesn't obscure the help button */
     bottom: 4.5rem;
   }
 

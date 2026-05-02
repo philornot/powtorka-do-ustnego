@@ -14,51 +14,51 @@ const TUTORIAL_SEEN_KEY = 'pdu_tutorial_seen';
 
 /**
  * @typedef {Object} TutorialStep
- * @property {string}       title  - Step heading.
- * @property {string}       body   - Step body HTML (strong tags allowed).
- * @property {string|null}  target - CSS selector to spotlight, or null.
+ * @property {string}      title  - Step heading.
+ * @property {string}      body   - Step body HTML (strong tags allowed).
+ * @property {string|null} target - CSS selector to spotlight, or null.
  */
 
 /** @type {TutorialStep[]} */
 const TUTORIAL_STEPS = [
   {
-    title: 'Witaj w powtórce! 👋',
-    body:  'To krótki przewodnik po aplikacji. Możesz go zamknąć w dowolnym momencie, klikając <strong>×</strong> lub <strong>Zakończ</strong>.',
+    title:  'Witaj w powtórce! 👋',
+    body:   'To krótki przewodnik po aplikacji. Możesz go zamknąć w dowolnym momencie, klikając <strong>×</strong> lub <strong>Zakończ</strong>.',
     target: null,
   },
   {
-    title: 'Wylosuj pytanie',
-    body:  'Kliknij dowolną kartę, żeby wylosować pytanie maturalne. Karty wylosowane wcześniej są wyszarzone.',
+    title:  'Wylosuj pytanie',
+    body:   'Kliknij dowolną kartę, żeby wylosować pytanie maturalne. Karty wylosowane wcześniej są odwrócone i lekko wyszarzone – możesz w nie kliknąć, żeby wrócić do pytania.',
     target: '#cards-grid',
   },
   {
-    title: 'Resetuj talię',
-    body:  'Ten przycisk tasuje karty od nowa i resetuje historię wylosowanych pytań. Użyj go, gdy chcesz zacząć od początku.',
+    title:  'Resetuj talię',
+    body:   'Ten przycisk tasuje karty od nowa i resetuje historię wylosowanych pytań. Użyj go, gdy chcesz zacząć od początku.',
     target: '#btn-reset-deck',
   },
   {
-    title: 'Edytuj tytuły karteczek',
-    body:  '<strong>Kliknij na tytuł karteczki</strong> (np. „teza"), żeby go zmienić. Dostosuj sekcje do struktury swojej wypowiedzi.',
+    title:  'Przeciągaj karteczki',
+    body:   'Złap karteczkę za <strong>zakreskowany pasek</strong> u góry i przeciągnij ją w dowolne miejsce. Najedź na puste pole – podświetli się na fioletowo – i puść, żeby zadokować karteczkę. Na urządzeniach dotykowych przeciąganie jest wyłączone.',
     target: null,
   },
   {
-    title: 'Przeciągaj karteczki',
-    body:  'Na komputerze możesz <strong>przeciągać karteczki</strong> – złap za nagłówek i upuść gdziekolwiek na stronie. Na mobile karteczki są zablokowane.',
+    title:  'Edytuj tytuły karteczek',
+    body:   '<strong>Kliknij na tytuł karteczki</strong> (np. „teza"), żeby go zmienić. Dostosuj sekcje do struktury swojej wypowiedzi.',
     target: null,
   },
   {
-    title: 'Dodawaj i usuwaj sekcje',
-    body:  'Przycisk <strong>+ dodaj karteczkę</strong> dodaje nową sekcję. Przycisk <strong>×</strong> w prawym górnym rogu każdej karteczki ją usuwa.',
+    title:  'Dodawaj i usuwaj sekcje',
+    body:   'Przycisk <strong>+ dodaj karteczkę</strong> dodaje nową sekcję w pierwszym wolnym miejscu. Przycisk <strong>×</strong> w prawym górnym rogu usuwa karteczkę i zostawia po niej puste pole.',
     target: null,
   },
   {
-    title: 'Tryb „wypowiedź"',
-    body:  'Przełącz na tryb <strong>wypowiedź</strong>, żeby pisać w jednym dużym polu tekstowym z licznikiem znaków – klasyczny sposób.',
+    title:  'Tryb „wypowiedź"',
+    body:   'Przełącz na tryb <strong>wypowiedź</strong>, żeby pisać w jednym dużym polu tekstowym. Widać tam <strong>szacowany czas mówienia</strong>, liczbę słów i liczbę znaków.',
     target: null,
   },
   {
-    title: 'Gotowe! 🎉',
-    body:  'Notatki są zapisywane automatycznie w przeglądarce. Wróć do tego przewodnika w każdej chwili, klikając <strong>?</strong> w lewym dolnym rogu. Powodzenia!',
+    title:  'Gotowe! 🎉',
+    body:   'Notatki, tytuły karteczek i treść wypowiedzi są <strong>zapisywane automatycznie</strong> w przeglądarce per pytanie. Wróć do tego przewodnika w każdej chwili, klikając <strong>?</strong> w lewym dolnym rogu. Powodzenia!',
     target: null,
   },
 ];
@@ -131,7 +131,6 @@ function closeTutorial() {
  */
 function goToStep(index) {
   if (!overlayEl) return;
-
   if (index < 0) return;
   if (index >= TUTORIAL_STEPS.length) { closeTutorial(); return; }
 
@@ -141,9 +140,9 @@ function goToStep(index) {
 
   showSpotlight(step.target);
 
-  overlayEl.querySelector('.tut-title').textContent    = step.title;
-  overlayEl.querySelector('.tut-body').innerHTML       = step.body;
-  overlayEl.querySelector('.tut-counter').textContent  = `${index + 1} / ${TUTORIAL_STEPS.length}`;
+  overlayEl.querySelector('.tut-title').textContent   = step.title;
+  overlayEl.querySelector('.tut-body').innerHTML      = step.body;
+  overlayEl.querySelector('.tut-counter').textContent = `${index + 1} / ${TUTORIAL_STEPS.length}`;
 
   const prevBtn = /** @type {HTMLButtonElement} */ (overlayEl.querySelector('.tut-prev'));
   const nextBtn = /** @type {HTMLButtonElement} */ (overlayEl.querySelector('.tut-next'));
@@ -158,9 +157,9 @@ function goToStep(index) {
  * @param {KeyboardEvent} e
  */
 function handleTutorialKey(e) {
-  if (e.key === 'Escape')                             closeTutorial();
-  if (e.key === 'ArrowRight' || e.key === 'Enter')   goToStep(currentStep + 1);
-  if (e.key === 'ArrowLeft')                          goToStep(currentStep - 1);
+  if (e.key === 'Escape')                           closeTutorial();
+  if (e.key === 'ArrowRight' || e.key === 'Enter') goToStep(currentStep + 1);
+  if (e.key === 'ArrowLeft')                        goToStep(currentStep - 1);
 }
 
 /**
@@ -195,22 +194,18 @@ function openTutorial() {
   overlayEl.querySelector('.tut-prev').addEventListener('click', () => goToStep(currentStep - 1));
   overlayEl.querySelector('.tut-next').addEventListener('click', () => goToStep(currentStep + 1));
 
-  /** Close on backdrop click (not card click). */
   overlayEl.addEventListener('click', e => {
     if (e.target === overlayEl) closeTutorial();
   });
 
   document.addEventListener('keydown', handleTutorialKey);
-
   goToStep(0);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 /**
- * Wires up the help button (id="help-btn") and adds a pulse class on
- * first visit to draw the user's attention.
- *
+ * Wires up the help button and adds a pulse class on first visit.
  * Must be called after the DOM is ready.
  */
 function initHelpButton() {
